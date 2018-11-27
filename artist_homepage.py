@@ -1,8 +1,8 @@
+import re
+
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
-from bs4 import BeautifulSoup
-import csv
-import re
 
 from get_signed_artist import SignedArtistSpider
 
@@ -35,6 +35,9 @@ class HomepageSpider:
         self.browser.switch_to.frame("g_iframe")
         html = self.browser.page_source
         soup = BeautifulSoup(html, "lxml")
+        counts = soup.select("strong")  # search via label
+        for count in counts:
+            event_num = count.get_text()
 
     # def fans(self):
 
