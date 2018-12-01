@@ -1,1 +1,1 @@
-This spider on Netease Cloud Music aims to crawling data of relationships between signed aritsts.
+This spider on Netease Cloud Music aims to crawl relationship data between signed aritsts.
