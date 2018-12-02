@@ -1,6 +1,5 @@
 import csv
 
-from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -13,9 +12,11 @@ wait = WebDriverWait(browser, 5)  # @TODO
 class ArtistMusicSpider:
     def __init__(self):
         self.base_url = "https://music.163.com/#/"
-        self.homepage_dict = self.read_homepage_from_file("data/signed_artist.csv")
+        # self.homepage_dict = self.read_homepage_from_file("data/signed_artist.csv")
+        self.loved_music_url_id = self.read_loved_music_url_id("data/loved_music_url_id.csv")
 
-    def read_homepage_from_file(self, datafile):
+    @staticmethod
+    def read_homepage_from_file(datafile):
         homepage_name_id_dict = {}
         with open(datafile, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -23,89 +24,73 @@ class ArtistMusicSpider:
                 homepage_name_id_dict.update({row["artist_name"]: row["artist_homepage"]})
         return homepage_name_id_dict
 
-    def loved_music(self, homepage_id: str):
+    @staticmethod
+    def read_loved_music_url_id(datafile):
+        url_id_dict = {}
+        with open(datafile, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                url_id_dict.update({row["artist_name"]: row["loved_music_url_id"]})
+        return url_id_dict
+
+    def loved_music(self, playlist_id: str):
         """get the artist's loved music list"""
-        url = self.base_url + "playlist?id=" + str(homepage_id)
+        url = self.base_url + "playlist?id=" + str(playlist_id)
         browser.get(url)
         browser.switch_to.frame("g_iframe")
-        html = browser.page_source
-        soup = BeautifulSoup(html, "lxml")
 
-        raw_loved_music_list = browser.find_elements_by_xpath("//a[contains(@href, '/song?id=')]")
-        # due to my analysis, every music item contains three lines,
-        # however, only line1 and line3 contain music name.
-        # maybe this is the anti-crawler measure ?
-        temp_music_file = "data/temp_loved_music.txt"
-        with open(temp_music_file, "w", encoding="utf-8") as f:
-            for idx, music in enumerate(raw_loved_music_list):
-                f.write(str(music.text) + "\n")
-        f.close()
-        loved_music_list = []
-        with open(temp_music_file, "r", encoding="utf-8") as f:
-            line_count = 0
-            music_name = ""
-            for line in f.readlines():
-                line_count += 1
-                if line_count == 2:
-                    continue
-                elif line_count == 1:
-                    music_name = str(line.strip())
-                elif line_count == 3:
-                    music_name += str(line.strip())
-                    loved_music_list.append(music_name)
-                    line_count = 0
+        raw_loved_music_list = browser.find_elements_by_xpath("//a[contains(@href, '/song?id=')]/b[@title]")
+
+        loved_music_list = []  # @TODO: I think saving not only music name but also music id would be better here
+        for music in raw_loved_music_list:
+            _name = str(music.get_attribute("title")).replace("\xa0", " ")
+            loved_music_list.append(_name)
 
         raw_album_list = browser.find_elements_by_xpath("//a[contains(@href, '/album?id=')]")
-        # due to my analysis, every album item contains two lines,
-        # line 1 and line 2 make up the album name together.
-        temp_album_file = "data/temp_loved_music_album.txt"
-        with open(temp_album_file, "w", encoding="utf-8") as f:
-            for idx, album in enumerate(raw_album_list):
-                f.write(str(album.text) + "\n")
-        f.close()
-        album_list = []
-        with open(temp_album_file, "r", encoding="utf-8") as f:
-            line_count = 0
-            album_name = ""
-            for line in f.readlines():
-                line_count += 1
-                if line_count == 1:
-                    album_name = str(line.strip())
-                else:
-                    album_name += str(line.strip())
-                    line_count = 0
-                    album_list.append(album_name)
+        album_name_list = []  # name may be replicate
+        album_id_list = []
+        for album in raw_album_list:
+            _name = str(album.get_attribute("title")).replace("\xa0", " ")
+            _id = str(album.get_attribute("href")).split("=")[1]
+            album_name_list.append(_name)
+            album_id_list.append(_id)
 
-        assert (len(loved_music_list) == len(album_list))
+        assert len(loved_music_list) == len(album_name_list) == len(album_id_list)
 
-        # match the music name and album name
+        # match the music name and album name, album id
         music_album_dict = {}
-        for music_name, album_name in zip(loved_music_list, album_list):
-            music_album_dict[music_name] = album_name
+        for music_name, album_name, album_id in zip(loved_music_list,
+                                                    album_name_list,
+                                                    album_id_list):
+            music_album_dict[music_name] = {album_name: album_id}
         return music_album_dict
 
     def save_all_loved_music_to_file(self, csv_file: str):
         with open(csv_file, "w", newline="", encoding="utf-8") as f:
-            filednames = ["artist_name", "music", "album"]
+            filednames = ["artist_name", "music", "album_name", "album_id"]
             writer = csv.DictWriter(f, filednames)
             writer.writeheader()
-            for homepage in self.homepage_dict.items():
-                _name = homepage[0]
-                _id = homepage[1]
+            for playlist_id in self.loved_music_url_id.items():
+                _name = playlist_id[0]
+                _id = playlist_id[1]
                 _music_album_dict = self.loved_music(_id)
                 print("saving loved music of {0},"
-                      " homepage id: {1}".format(_name, _id))
+                      " playlist id: {1}".format(_name, _id))
                 for ele in _music_album_dict:
+                    _album_name = list(_music_album_dict[ele].keys())[0]
+                    _album_id = _music_album_dict[ele][_album_name]
                     data = {"artist_name": _name,
-                            "music": ele[0],
-                            "album": ele[1]}
+                            "music": ele,
+                            "album_name": _album_name,
+                            "album_id": _album_id}
                     writer.writerow(data)
 
 
 if __name__ == '__main__':
     artist_music_spider = ArtistMusicSpider()
+
     # test love_music
-    # music_album = artist_music_spider.loved_music("46973796")
+    # music_album = artist_music_spider.loved_music("61037035")
     # print(music_album)
 
     # test save_all_loved_music_to_file
