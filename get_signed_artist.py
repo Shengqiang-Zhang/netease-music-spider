@@ -1,17 +1,21 @@
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
 import csv
 import re
 
-browser = webdriver.Chrome()
-wait = WebDriverWait(browser, 5)    # @TODO
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument("--headless")
+browser = webdriver.Chrome(chrome_options=chrome_options)
+wait = WebDriverWait(browser, 5)  # @TODO
 
 
 class SignedArtistSpider:
     def __init__(self):
-        self.idlist = [1001]
-        self.initial_letter = [i for i in range(65, 67)]
+        self.idlist = [1001, 1002, 1003, 2001, 2002, 2003, 6001, 6002, 6003,
+                       7001, 7002, 4001, 4002, 4003]
+        self.initial_letter = [i for i in range(65, 91)].append(-1)
         self.base_url = "https://music.163.com/#/discover/artist/cat?"
         self.url_list = [self.base_url + "id={0}&initial={1}".format(i, j)
                          for i in self.idlist for j in self.initial_letter]
@@ -51,7 +55,7 @@ class SignedArtistSpider:
                              "artist_homepage": homepages[name]})
         return signed_artist_name_id, signed_artist_name_homepage, data
 
-    def homepage_list(self):
+    def homepage_list(self, csv_file: str):
         homepage_list = {}
         for _url in self.url_list:
             _, homepage, _ = SignedArtistSpider.select_signed_artist(_url)
@@ -60,7 +64,7 @@ class SignedArtistSpider:
 
     @staticmethod
     def save2csv(url, csv_file: str):
-        print("save to file...")
+        # print("save data to csv file: " + csv_file)
         with open(csv_file, "a", newline="", encoding="utf-8") as f:
             fieldnames = ["artist_name", "artist_id", "artist_homepage"]
             writer = csv.DictWriter(f, fieldnames)
@@ -72,9 +76,11 @@ class SignedArtistSpider:
 
     def main(self):
         for _url in self.url_list:
-            self.save2csv(_url, "data/signed_artist.csv")
+            print("Crawling url: " + str(_url))
+            self.save2csv(_url, "data/signed_artist_total.csv")
 
 
 if __name__ == '__main__':
     artist_spider = SignedArtistSpider()
     artist_spider.main()
+    browser.quit()

@@ -67,8 +67,8 @@ class ArtistMusicSpider:
 
     def save_all_loved_music_to_file(self, csv_file: str):
         with open(csv_file, "w", newline="", encoding="utf-8") as f:
-            filednames = ["artist_name", "music", "album_name", "album_id"]
-            writer = csv.DictWriter(f, filednames)
+            fieldnames = ["artist_name", "music", "album_name", "album_id"]
+            writer = csv.DictWriter(f, fieldnames)
             writer.writeheader()
             for playlist_id in self.loved_music_url_id.items():
                 _name = playlist_id[0]
