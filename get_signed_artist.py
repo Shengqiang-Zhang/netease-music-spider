@@ -15,7 +15,8 @@ class SignedArtistSpider:
     def __init__(self):
         self.idlist = [1001, 1002, 1003, 2001, 2002, 2003, 6001, 6002, 6003,
                        7001, 7002, 4001, 4002, 4003]
-        self.initial_letter = [i for i in range(65, 91)].append(-1)
+        self.initial_letter = [i for i in range(65, 91)]
+        self.initial_letter.append(0)
         self.base_url = "https://music.163.com/#/discover/artist/cat?"
         self.url_list = [self.base_url + "id={0}&initial={1}".format(i, j)
                          for i in self.idlist for j in self.initial_letter]
@@ -31,12 +32,13 @@ class SignedArtistSpider:
         artists = {}
         homepages = {}
         for artist in artist_info:
-            name = artist.get_text()
+            name = str(artist.get_text()).replace("\xa0", " ")
             id = str(re.findall('href="(.*?)"', str(artist))).split("=")[1].split("\'")[0]
             artists[name] = id
         for homepage in homepage_info:
             homepage_id = str(re.findall('href="(.*?)"', str(homepage))).split("=")[1].split("\'")[0]
-            homepage_name = str(re.findall('title="(.*?)"', str(homepage))).split("的个人主页")[0].split("\'")[1]
+            homepage_name = str(re.findall('title="(.*?)"', str(homepage))).split("的个人主页")[0].split("\'")[1].replace(
+                "\\xa0", " ")
             homepages[homepage_name] = homepage_id
         return artists, homepages
 
@@ -62,25 +64,29 @@ class SignedArtistSpider:
             homepage_list.update(homepage)
         return homepage_list
 
-    @staticmethod
-    def save2csv(url, csv_file: str):
-        # print("save data to csv file: " + csv_file)
-        with open(csv_file, "a", newline="", encoding="utf-8") as f:
+    def save2file(self, csv_file: str):
+        with open(csv_file, "w", newline="", encoding="utf-8") as f:
             fieldnames = ["artist_name", "artist_id", "artist_homepage"]
             writer = csv.DictWriter(f, fieldnames)
             writer.writeheader()
-            _, _, data = SignedArtistSpider.select_signed_artist(url)
-            print(data)
-            writer.writerows(data)
-            print("save successed")
-
-    def main(self):
-        for _url in self.url_list:
-            print("Crawling url: " + str(_url))
-            self.save2csv(_url, "data/signed_artist_total.csv")
+            for _url in self.url_list:
+                print("Crawling url: " + str(_url))
+                _, _, data = SignedArtistSpider.select_signed_artist(_url)
+                writer.writerows(data)
 
 
 if __name__ == '__main__':
     artist_spider = SignedArtistSpider()
-    artist_spider.main()
+
+    # test get_all_artist
+    # a, b = artist_spider.get_all_artist("https://music.163.com/#/discover/artist/cat?id=1001&initial=65")
+    # print("artist name", a)
+    # print("artist homepage", b)
+
+    # test select_signed_artist
+    # id, _, _ = artist_spider.select_signed_artist("https://music.163.com/#/discover/artist/cat?id=1001&initial=65")
+    # print("artist_name_id:", id)
+
+    artist_spider.save2file("data/signed_artists_total.csv")
+
     browser.quit()

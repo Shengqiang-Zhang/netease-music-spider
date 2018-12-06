@@ -1,5 +1,6 @@
 import csv
 import re
+import time
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -12,18 +13,16 @@ browser.set_window_size(1000, 30000)
 wait = WebDriverWait(browser, 5)  # @TODO
 
 
+# missing_url = []  # for crawling missing url
+
+
 class HomepageSpider:
     def __init__(self):
         self.base_url = "https://music.163.com/#/user/"
-        self.homepage_name_id_dict = self.read_homepage_from_file("data/signed_artist.csv")
+        self.homepage_name_id_dict = self.read_homepage_from_file("data/signed_artists_total.csv")
         self.homepage_id_name_dict = {v: k for k, v in self.homepage_name_id_dict.items()}
         # self.artist_spider = SignedArtistSpider()
         # self.homepage_id_list = self.artist_spider.homepage_list()
-
-    def execute_times(self, times):
-        for i in range(times + 1):
-            browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            wait = WebDriverWait(browser, 5)
 
     @staticmethod
     def read_homepage_from_file(datafile):
@@ -41,23 +40,43 @@ class HomepageSpider:
         url = self.base_url + "follows?id=" + homepage_id
         browser.get(url)
         browser.switch_to.frame("g_iframe")
-        html = browser.page_source
-        soup = BeautifulSoup(html, "lxml")
-        follows_info = soup.select(".s-fc7.f-fs1.nm.f-thide")
         follows = {}
-        for follow in follows_info:
-            name = follow.get_text()
-            id = str(re.findall('href="(.*?)"', str(follow))).split("=")[1].split("\'")[0]
-            follows[name] = id
+        while True:
+            html = browser.page_source
+            soup = BeautifulSoup(html, "lxml")
+            follows_info = soup.select(".s-fc7.f-fs1.nm.f-thide")
+            for follow in follows_info:
+                name = follow.get_text()
+                id = str(re.findall('href="(.*?)"', str(follow))).split("=")[1].split("\'")[0]
+                follows[name] = id
+            # print(follows)
+            next_page = browser.find_elements_by_xpath("//a[contains(text(), '下一页')]")
+            if len(next_page) == 0:
+                break
+            elif str(next_page[0].get_attribute("class")).__contains__("js-disabled"):
+                break
+            else:
+                next_page[0].click()
+                time.sleep(1.6)
         return follows
 
-    def save_all_follows_list_to_file(self, file):
-        with open(file, "w", encoding="utf-8") as f:
+    def save_all_follows_list_to_file(self, csv_file: str):
+        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+            fieldnames = ["artist_name", "follows", "follows_homepage"]
+            writer = csv.DictWriter(f, fieldnames)
+            writer.writeheader()
+            count = 0
             for homepage in self.homepage_name_id_dict.items():
+                count += 1
                 _name = homepage[0]
                 _id = homepage[1]
                 _follows_list = self.follows_list(_id)
-                f.write(str(_name) + " " + str(_follows_list) + "\n")
+                print("saving follows list of %s, count: %d" % (_name, count))
+                for follows in _follows_list:
+                    data = {"artist_name": _name,
+                            "follows": follows,
+                            "follows_homepage": _follows_list[follows]}
+                    writer.writerow(data)
 
     def events_follows_fans_nums(self, homepage_id):
         """return number of events, follows and fans of the artist"""
@@ -78,14 +97,18 @@ class HomepageSpider:
         return event_count, follow_count, fan_count
 
     def save_events_follows_fans_nums_to_file(self, csv_file: str):
-        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+        with open(csv_file, "a", newline="", encoding="utf-8") as f:
             fieldnames = ["artist_name", "events_count",
                           "follows_count", "fans_count"]
             writer = csv.DictWriter(f, fieldnames)
             writer.writeheader()
+            count = 0
             for homepage in self.homepage_name_id_dict.items():
+                count += 1
                 _name = homepage[0]
                 _id = homepage[1]
+                print("Saving three nums of %s's homepage, count = %d"
+                      % (_name, count))
                 _ec, _fc, _fan_c = self.events_follows_fans_nums(_id)
                 data = {"artist_name": _name,
                         "events_count": _ec,
@@ -114,15 +137,17 @@ class HomepageSpider:
 
     def save_all_artists_in_event_to_file(self, csv_file: str):
         """save all artists' events related artists to file"""
-        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+        with open(csv_file, "a", newline="", encoding="utf-8") as f:
             fieldnames = ["artist_name", "at_artist", "at_artist_id"]
             writer = csv.DictWriter(f, fieldnames)
-            writer.writeheader()
+            # writer.writeheader()
+            count = 0
             for homepage in self.homepage_name_id_dict.items():
+                count += 1
                 _name = homepage[0]
                 _id = homepage[1]
                 print("saving artists in %s's event, "
-                      "homepage_id: %s" % (_name, _id))
+                      "homepage_id: %s, count: %d" % (_name, _id, count))
                 _artists_list, _artists_dict = self.find_artists_in_events(_id)
                 for artist in _artists_list:
                     data = {"artist_name": _name,
@@ -179,26 +204,29 @@ class HomepageSpider:
         browser.get(url)
         browser.switch_to.frame("g_iframe")
 
-        all_links = browser.find_elements_by_xpath("//*[@href]")
-        title = "喜欢的音乐"
-        _url_id = ""
-        for link in all_links:
-            if str(link.get_attribute('title')).__contains__(title):
-                # print(link.get_attribute("href"))
-                _url_id = link.get_attribute("href").split("=")[1]
-                break
-        assert len(_url_id) > 0
+        all_links = browser.find_elements_by_xpath("//a[contains(@title, '喜欢的音乐')]")
+        while len(all_links) == 0:  # find until all_links contains what we want.
+            print("enter while")
+            all_links = browser.find_elements_by_xpath("//a[contains(@title, '喜欢的音乐')]")
+        _url_id = str(all_links[0].get_attribute("href")).split("=")[1]
+        print(_url_id)
+        try:
+            assert len(_url_id) > 0
+        except:
+            print("Exception", _url_id)
         return _url_id
 
     def save_all_loved_music_url_id_to_file(self, csv_file: str):
-        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+        with open(csv_file, "a", newline="", encoding="utf-8") as f:
             fieldnames = ["artist_name", "loved_music_url_id"]
             writer = csv.DictWriter(f, fieldnames)
             writer.writeheader()
+            count = 0
             for homepage in self.homepage_name_id_dict.items():
+                count += 1
                 _name = homepage[0]
                 _id = homepage[1]
-                print("saving loved music file of", _name)
+                print("saving loved music file of", _name, "count:", count)
                 _url_id = self.get_loved_music_url_id(_id)
                 data = {"artist_name": _name,
                         "loved_music_url_id": _url_id}
@@ -209,10 +237,14 @@ if __name__ == '__main__':
     hp_spider = HomepageSpider()
 
     # test follows_list
-    # hp_spider.save_all_follows_list_to_file("data/follows_list.txt")
+    # follows_list = hp_spider.follows_list("93249076")
+    # follows_list = hp_spider.follows_list("72145909")
+    # follows_list = hp_spider.follows_list("265145")
+    # print(follows_list)
+    hp_spider.save_all_follows_list_to_file("data/follows_list_total.csv")
 
     # test events_follows_fans_nums
-    # hp_spider.save_events_follows_fans_nums_to_file("data/events_follows_fans_num.csv")
+    # hp_spider.save_events_follows_fans_nums_to_file("data/events_follows_fans_num_total.csv")
 
     # test find_artists_in_events
     # hp_spider.find_artists_in_events("29879272")
@@ -220,22 +252,28 @@ if __name__ == '__main__':
     # hp_spider.find_artists_in_events("135214753")
 
     # test save_all_artists_in_event_to_file
-    # hp_spider.save_all_artists_in_event_to_file("data/artists_in_events.csv")
+    # hp_spider.save_all_artists_in_event_to_file("data/artists_in_events_total.csv")
 
     # test get_music_in_events
     # hp_spider.get_music_in_events("135214753")
 
     # test save_all_music_in_event_to_file
-    hp_spider.save_all_music_in_event_to_file("data/music_in_events.csv")
+    # hp_spider.save_all_music_in_event_to_file("data/music_in_events.csv")
 
     # test get_loved_music_url_id
-    # url_id = hp_spider.get_loved_music_url_id("375114798")
+    # url_id = hp_spider.get_loved_music_url_id("3434543")
     # print(url_id)
 
     # test save_all_loved_music_utl_id_to_file
-    # hp_spider.save_all_loved_music_url_id_to_file("data/loved_music_url_id.csv")
+    # hp_spider.save_all_loved_music_url_id_to_file("data/loved_music_url_id_2.csv")
+
     # for homepage in hp_spider.homepage_dict.items():
     #     name = homepage[0]
     #     id = homepage[1]
     #     event, follow, fan = hp_spider.events_follows_fans_nums(id)
     #     print(name, event, follow, fan)
+    browser.quit()
+    # with open("data/missing_url.txt", "w", encoding="utf-8") as f:
+    #     for i in missing_url:
+    #         f.write(i + "\n")
+#

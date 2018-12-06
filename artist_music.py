@@ -13,7 +13,7 @@ class ArtistMusicSpider:
     def __init__(self):
         self.base_url = "https://music.163.com/#/"
         # self.homepage_dict = self.read_homepage_from_file("data/signed_artist.csv")
-        self.loved_music_url_id = self.read_loved_music_url_id("data/loved_music_url_id.csv")
+        self.loved_music_url_id = self.read_loved_music_url_id("data/loved_music_url_id_2.csv")
 
     @staticmethod
     def read_homepage_from_file(datafile):
@@ -66,16 +66,18 @@ class ArtistMusicSpider:
         return music_album_dict
 
     def save_all_loved_music_to_file(self, csv_file: str):
-        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+        with open(csv_file, "a", newline="", encoding="utf-8") as f:
             fieldnames = ["artist_name", "music", "album_name", "album_id"]
             writer = csv.DictWriter(f, fieldnames)
             writer.writeheader()
+            count = 0
             for playlist_id in self.loved_music_url_id.items():
+                count += 1
                 _name = playlist_id[0]
                 _id = playlist_id[1]
                 _music_album_dict = self.loved_music(_id)
                 print("saving loved music of {0},"
-                      " playlist id: {1}".format(_name, _id))
+                      " playlist id: {1}, count = {2}".format(_name, _id, count))
                 for ele in _music_album_dict:
                     _album_name = list(_music_album_dict[ele].keys())[0]
                     _album_id = _music_album_dict[ele][_album_name]
@@ -86,6 +88,7 @@ class ArtistMusicSpider:
                     writer.writerow(data)
 
 
+
 if __name__ == '__main__':
     artist_music_spider = ArtistMusicSpider()
 
@@ -94,4 +97,5 @@ if __name__ == '__main__':
     # print(music_album)
 
     # test save_all_loved_music_to_file
-    artist_music_spider.save_all_loved_music_to_file("data/artist_loved_music.csv")
+    artist_music_spider.save_all_loved_music_to_file("data/artist_loved_music_total.csv")
+    # artist_music_spider.check()
