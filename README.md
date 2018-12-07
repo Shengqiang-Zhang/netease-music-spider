@@ -1,7 +1,7 @@
 This spider on Netease Cloud Music aims to crawl relationship data between signed aritsts.
 # Instruction to the codes
 
-##`get_signed_artist.py`
+## `get_signed_artist.py`
 
 In this part, we get all signed artists.
 
